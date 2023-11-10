@@ -34,8 +34,10 @@ usage(char *commandline)
     "Image files:\n"
     " -center <image>            Render an image centered on screen\n"
     " -cover <image>             Render an image centered on screen scaled to fill the screen fully\n"
-    " -tile <image>              Render an image tiled\n"
     " -full <image>              Render an image maximum aspect\n"
+    " -non-center                Don't center the image (for -tile)\n"
+    " -maxpect                   Emulate XV maxpect (for -tile)\n"
+    " -tile <image>              Render an image tiled\n"
     " -extend <image>            Render an image max aspect and fill borders\n"
     " -fill <image>              Render an image stretched\n"
     "\n"
@@ -131,6 +133,12 @@ parse_color(char *arg, Color *c, int default_alpha)
   return 1;
 }
 
+// the -maxpect and -center options should precede -tile (or -center)
+// to have any effect.  (these global options could presumably be
+// avoided.)
+int opt_non_center = false;
+int opt_maxpect = false;
+
 int
 load_image(ImageMode mode, const char *arg, int alpha, Imlib_Image rootimg, XineramaScreenInfo *outputs, int noutputs)
 {
@@ -200,19 +208,26 @@ load_image(ImageMode mode, const char *arg, int alpha, Imlib_Image rootimg, Xine
         }
       }
     } else {  // Center || Tile
-      int left = (o.width - imgW) / 2;
-      int top = (o.height - imgH) / 2;
+
+      double aspect = 1;
+      if (opt_maxpect) {
+	aspect = ((double) o.width) / imgW;
+	if ((int) (imgH * aspect) > o.height)
+	  aspect = (double) o.height / (double) imgH;
+      }
+      int left = !opt_non_center ? (o.width - (int) (imgW*aspect)) / 2 : 0;
+      int top = !opt_non_center ? (o.height - (int) (imgH*aspect)) / 2 : 0;
 
       if (mode == Tile) {
         int x, y;
-        for (; left > 0; left -= imgW);
-        for (; top > 0; top -= imgH);
+        for (; left > 0; left -= (int)(imgW*aspect));
+        for (; top > 0; top -= (int)(imgH*aspect));
 
-        for (x = left; x < o.width; x += imgW)
-          for (y = top; y < o.height; y += imgH)
-            imlib_blend_image_onto_image(buffer, 0, 0, 0, imgW, imgH, o.x_org + x, o.y_org + y, imgW, imgH);
+        for (x = left; x < o.width; x +=  (int)(imgW*aspect))
+          for (y = top; y < o.height; y += (int)(imgH*aspect))
+            imlib_blend_image_onto_image(buffer, 0, 0, 0, imgW, imgH, o.x_org + x, o.y_org + y, (int) (imgW*aspect), (int) (imgH*aspect));
       } else {
-        imlib_blend_image_onto_image(buffer, 0, 0, 0, imgW, imgH, o.x_org + left, o.y_org + top, imgW, imgH);
+        imlib_blend_image_onto_image(buffer, 0, 0, 0, imgW, imgH, o.x_org + left, o.y_org + top, (int) (imgW*aspect), (int) (imgH*aspect));
       }
     }
   }
@@ -438,6 +453,12 @@ main(int argc, char **argv)
           fprintf(stderr, "Bad image (%s)\n", argv[i]);
           continue;
         }
+      } else if (strcmp(argv[i], "-non-center") == 0) {
+	opt_non_center = true;
+	continue;
+      } else if (strcmp(argv[i], "-maxpect") == 0) {
+	opt_maxpect = true;
+	continue;
       } else if (strcmp(argv[i], "-center") == 0) {
         if ((++i) >= argc) {
           fprintf(stderr, "Missing image\n");
