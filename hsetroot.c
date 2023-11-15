@@ -7,6 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef HANDLE_XERRORS
+#define HANDLE_XERRORS 1
+#endif
+// avoid errors (from the commit which changed XROOTPMAP to _XROOTPMAP_ID)
+// command "hsetroot -tile /tmp/1.jpg exited abnormally with code 1": "output 0: size(1920, 1080) pos(0, 0) X Error of failed request: BadValue (integer parameter out of range for operation) Major opcode of failed request: 113 (X_KillClient) Value in failed request: 0x2200001 Serial number of failed request: 25 Current serial number in output stream: 32"
 
 typedef enum { Full, Fill, Center, Tile, Xtend, Cover } ImageMode;
 
@@ -66,6 +71,21 @@ usage(char *commandline)
 Display *display;
 int screen;
 
+// from Imlib2
+#if HANDLE_XERRORS
+static char         _x_err = 0;
+static int
+Tmp_HandleXError (Display * d, XErrorEvent * ev)
+{
+  if (ev->error_code == 0) {
+    fprintf(stderr, "Sanity fails\n");
+    exit(1);
+  }
+  _x_err = ev->error_code;
+  return 0;
+}
+#endif
+
 // Adapted from fluxbox' bsetroot
 int
 setRootAtoms(Pixmap pixmap)
@@ -75,6 +95,9 @@ setRootAtoms(Pixmap pixmap)
   int format;
   unsigned long length, after;
 
+#if HANDLE_XERRORS
+  XErrorHandler       prev_erh;
+#endif
   atom_root = XInternAtom(display, "_XROOTPMAP_ID", True);
   atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", True);
 
@@ -85,8 +108,21 @@ setRootAtoms(Pixmap pixmap)
     if (type == XA_PIXMAP) {
       XGetWindowProperty(display, RootWindow(display, screen), atom_eroot, 0L, 1L, False, AnyPropertyType, &type, &format, &length, &after, &data_eroot);
 
-      if (data_root && data_eroot && type == XA_PIXMAP && *((Pixmap *) data_root) == *((Pixmap *) data_eroot))
+      if (data_root && data_eroot && type == XA_PIXMAP && *((Pixmap *) data_root) == *((Pixmap *) data_eroot)) {
+#if HANDLE_XERRORS
+	XSync (display, False);
+	prev_erh = XSetErrorHandler (Tmp_HandleXError);
+	_x_err = 0;
+#endif
         XKillClient(display, *((Pixmap *) data_root));
+#if HANDLE_XERRORS
+	XSync (display, False);
+	XSetErrorHandler (prev_erh);
+	if (_x_err != 0) {
+	  fprintf(stderr, "error: Handled XError Badvalue code=%d\n", _x_err);
+	}
+#endif
+      }
     }
   }
 

@@ -28,6 +28,14 @@ LDFLAGS+=$(shell $(PKG_CONFIG) imlib2 --libs)
 CFLAGS+=$(shell $(PKG_CONFIG) xinerama --cflags)
 LDFLAGS+=$(shell $(PKG_CONFIG) xinerama --libs)
 
+# to build without trapping Xerrors, use `make HANDLE_XERRORS=0', default
+# to 1.
+ifneq ($(HANDLE_XERRORS), 0)
+hsetroot: CFLAGS+=-DHANDLE_XERRORS=1
+else
+hsetroot: CFLAGS+=-DHANDLE_XERRORS=0
+endif
+
 all: hsetroot hsr-outputs
 
 hsetroot: hsetroot.o
