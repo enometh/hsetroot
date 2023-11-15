@@ -28,6 +28,18 @@ LDFLAGS+=$(shell $(PKG_CONFIG) imlib2 --libs)
 CFLAGS+=$(shell $(PKG_CONFIG) xinerama --cflags)
 LDFLAGS+=$(shell $(PKG_CONFIG) xinerama --libs)
 
+# to build without FVWM3 use `make LINK_FVWM3=0', default to 1
+# and edit config-link-fvwm3.mk
+LINK_FVWM3?=1
+
+ifneq ($(LINK_FVWM3), 0)
+include config-link-fvwm3.mk
+hsetroot: CFLAGS+=-DLINK_FVWM3=1 $(FVWM3LIB_CFLAGS)
+hsetroot: LDFLAGS+=$(FVWM3LIB_LDFLAGS)
+else
+hsetroot: CFLAGS+=-DLINK_FVWM3=0
+endif
+
 # to build without trapping Xerrors, use `make HANDLE_XERRORS=0', default
 # to 1.
 ifneq ($(HANDLE_XERRORS), 0)
@@ -38,7 +50,7 @@ endif
 
 all: hsetroot hsr-outputs
 
-hsetroot: hsetroot.o
+hsetroot: hsetroot.o $(FVWM3LIB_LIB)
 
 hsr-outputs: hsr-outputs.o
 

@@ -7,6 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef LINK_FVWM3
+#define LINK_FVWM3 0
+#endif
+
+#if LINK_FVWM3
+#include <ctype.h>
+#include "libs/Graphics.h"
+#include "libs/PictureUtils.h"
+#endif
+
 #ifndef HANDLE_XERRORS
 #define HANDLE_XERRORS 1
 #endif
@@ -61,6 +71,17 @@ usage(char *commandline)
     " -alpha <amount>            Adjust alpha level for colors and images\n"
     " -write <filename>          Write current image to file\n"
     "\n"
+#if LINK_FVWM3
+    "Fvwm Gradients:    See \"Color Gradients\" in man fvwm3commands(1)\n"
+    " -fvwm-gradient \"<gradient-type> <color-spec>\"\n"
+    "    gradient-type = ?Gradient (where ? is one of HVDBSCRY)\n"
+    "    color-spec = linear | nonlinear\n"
+    "    non-linear = ncolors nsegments color length color [length color]..\n"
+    "    linear = ncolors start-color end-color\n"
+    " e.g. a 2-segment non-linear horizontal gradient:\n"
+    "    \"HGradient 128 2 green 10 blue 10 white\"\n"
+    "\n"
+#endif
     "Colors are in the #rgb, #rrggbb, #rrggbbaa, rgb:1/2/3 formats or a X color name.\n"
     "\n"
     "Create issues at https://github.com/himdel/hsetroot/issues\n\n"
@@ -453,6 +474,48 @@ main(int argc, char **argv)
           XineramaScreenInfo o = outputs[j];
           imlib_image_fill_color_range_rectangle(o.x_org, o.y_org, o.width, o.height, angle);
         }
+#if LINK_FVWM3
+      } else if (strcmp(argv[i], "-fvwm-gradient") == 0) {
+        if ((++i) >= argc) {
+          fprintf(stderr, "Missing fvwm3 gradient spec\n");
+          continue;
+        }
+	char *option = argv[i];
+	if (!option[0] || strncasecmp(&option[1], "Gradient", 8) != 0) {
+	  fprintf(stderr, "Expected ?Gradient <ncolors> <color1> <color2>\n");
+	  continue;
+	}
+	int gradient_type = toupper(option[0]);
+	if (!IsGradientTypeSupported(gradient_type)) {
+	  fprintf(stderr, "Unknown gradient type %c. Expected ?Gradient <ncolors> <color1> <color2>\n", gradient_type);
+	  continue;
+	}
+	char *gradient_string = &option[9];
+	PictureInitCMap(display);
+	Window win = RootWindow(display, screen);
+	XGCValues gcv;
+	GC gc = XCreateGC(display, win, None, &gcv);
+	int w, h, nalloc_pixels;
+	Pixel *pixels;
+	Pixmap pixmap =  CreateGradientPixmapFromString
+	  (
+	   display, win, gc, gradient_type,
+	   gradient_string, &w, &h, &pixels,
+	   &nalloc_pixels, True);
+	if (pixmap == None) {
+	  fprintf(stderr, "Failed to create a gradient pixmap\n");
+	  continue;
+	}
+	Drawable prev = imlib_context_get_drawable();
+	imlib_context_set_drawable(pixmap);
+	// XXX free old image here?
+	image = imlib_create_scaled_image_from_drawable(None,
+							0, 0, w, h,
+							width, height,
+							False, False);
+	imlib_context_set_image(image);
+	imlib_context_set_drawable(prev);
+#endif
       } else if (strcmp(argv[i], "-fill") == 0) {
         if ((++i) >= argc) {
           fprintf(stderr, "Missing image\n");
